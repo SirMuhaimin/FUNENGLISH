@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>UASA Form 3 English Quest</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: linear-gradient(135deg, #FFF9E6 0%, #E8F5E9 100%);
+      min-height: 100vh;
+    }
+    h1, h2, h3, .font-heading {
+      font-family: 'Fredoka', cursive;
+    }
+    .btn-3d {
+      transition: all 0.15s ease;
+      box-shadow: 0 5px 0 rgba(0, 0, 0, 0.15);
+    }
+    .btn-3d:active {
+      transform: translateY(3px);
+      box-shadow: 0 2px 0 rgba(0, 0, 0, 0.15);
+    }
+    .card-shadow {
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    }
+    @keyframes toast-in {
+      from { transform: translateY(-20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .animate-toast {
+      animation: toast-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+  </style>
+</head>
+<body class="p-3 sm:p-6 text-slate-800 relative">
+
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+  <!-- 1. PUPIL REGISTRATION SCREEN -->
+  <div id="registrationScreen" class="fixed inset-0 bg-amber-500/90 backdrop-blur-md z-40 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full border-4 border-amber-300 card-shadow text-center">
+      <div class="text-6xl mb-3">🎓</div>
+      <h1 class="text-3xl font-heading font-bold text-amber-600 mb-1">UASA Form 3</h1>
+      <h2 class="text-xl font-heading text-slate-600 mb-6">English Masterclass Quest</h2>
+      
+      <p class="text-sm font-semibold text-slate-500 mb-4 text-left">Please enter your details before starting:</p>
+
+      <div class="space-y-4 text-left mb-6">
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Pupil Full Name:</label>
+          <input type="text" id="inputStudentName" placeholder="e.g. Adam Bin Harun" 
+            class="w-full px-4 py-3 rounded-2xl border-2 border-amber-200 focus:border-amber-500 focus:outline-none font-bold text-slate-700">
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Class / Form:</label>
+          <input type="text" id="inputStudentClass" placeholder="e.g. 3 Gemilang" 
+            class="w-full px-4 py-3 rounded-2xl border-2 border-amber-200 focus:border-amber-500 focus:outline-none font-bold text-slate-700">
+        </div>
+      </div>
+
+      <button onclick="submitStudentRegistration()" 
+        class="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-heading text-xl rounded-2xl btn-3d font-bold tracking-wide">
+        🚀 Start Adventure!
+      </button>
+    </div>
+  </div>
+
+  <!-- 2. APPLICATION HEADER -->
+  <header class="max-w-4xl mx-auto bg-white/90 backdrop-blur rounded-3xl p-4 mb-6 card-shadow border-2 border-amber-200 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <div class="w-12 h-12 bg-amber-400 rounded-2xl flex items-center justify-center text-2xl shadow-inner">
+        ⭐
+      </div>
+      <div>
+        <h1 class="text-xl font-heading font-bold text-slate-800 leading-tight">Form 3 UASA Quest</h1>
+        <div class="text-xs font-bold text-emerald-600 bg-emerald-100 px-2.5 py-0.5 rounded-full inline-block mt-0.5" id="userBadge">
+          👤 Please Register
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 flex-wrap">
+      <button onclick="openLeaderboardModal()" class="px-3 py-2 bg-amber-400 hover:bg-amber-500 text-amber-950 rounded-2xl font-bold text-xs flex items-center gap-1.5 btn-3d">
+        <span>🏆</span> Leaderboard
+      </button>
+      <button onclick="promptTeacherPin()" class="px-3 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-2xl font-bold text-xs flex items-center gap-1.5 transition">
+        <span>🔑</span> <span id="teacherBtnText">Teacher Mode</span>
+      </button>
+      <button id="masterKeyBtn" onclick="openMasterKeyModal()" class="hidden px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-bold text-xs btn-3d">
+        📖 Master Key
+      </button>
+    </div>
+  </header>
+
+  <!-- 3. DASHBOARD VIEW -->
+  <main id="dashboardView" class="max-w-4xl mx-auto space-y-5">
+    <!-- Teacher Control Banner -->
+    <div id="teacherBanner" class="hidden bg-indigo-600 text-white p-5 rounded-3xl card-shadow flex flex-wrap items-center justify-between gap-3">
+      <div class="space-y-2 w-full sm:w-auto flex-1">
+        <p class="font-heading text-lg font-bold flex items-center gap-2">
+          <span>🔓 TEACHER MODE ACTIVE</span> 
+          <span class="text-xs bg-indigo-800 text-indigo-200 px-2 py-0.5 rounded-md font-mono">Passcode: 1029</span>
+        </p>
+        <p class="text-xs opacity-90">All stages are unlocked. Link your deployed Google Apps Script Web App URL below for live updates:</p>
+        
+        <div class="flex flex-col sm:flex-row gap-2 pt-1 max-w-xl">
+          <input type="text" id="googleSheetAppUrl" placeholder="https://script.google.com/macros/s/.../exec" 
+            class="flex-1 px-3 py-2 rounded-xl text-xs font-mono text-slate-800 bg-white border border-indigo-300 focus:outline-none">
+          <button onclick="saveGoogleSheetUrl()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl btn-3d">
+            💾 Save Live Sheet Link
+          </button>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="resetAllProgress()" class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold btn-3d">
+          🔄 Reset Progress
+        </button>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between px-2">
+      <h2 class="text-2xl font-heading font-bold text-slate-700">Select Quest Stage:</h2>
+      <div id="overallScoreBadge" class="text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-xl">
+        Total Mark: 0 / 80
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="levelGrid">
+      <!-- Generated via JS -->
+    </div>
+  </main>
+
+  <!-- 4. GAME PLAY CONTAINER -->
+  <section id="gameView" class="hidden max-w-4xl mx-auto bg-white rounded-3xl p-5 sm:p-8 card-shadow border-2 border-slate-100">
+    <div class="flex items-center justify-between pb-4 mb-6 border-b-2 border-slate-100">
+      <button onclick="showDashboard()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-bold text-sm">
+        ⬅️ Dashboard
+      </button>
+      <div id="levelTitle" class="font-heading text-lg sm:text-xl font-bold text-slate-800 text-center">
+        Stage Title
+      </div>
+      <div id="levelScoreBadge" class="bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold text-sm">
+        Score: 0
+      </div>
+    </div>
+
+    <div id="levelContentContainer"></div>
+  </section>
+
+  <!-- 5. TEACHER PIN MODAL -->
+  <div id="pinModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-sm w-full card-shadow text-center">
+      <div class="text-4xl mb-2">🔐</div>
+      <h3 class="text-xl font-heading font-bold text-slate-800 mb-2">Teacher Passcode</h3>
+      <p class="text-xs text-slate-500 mb-4">Enter the 4-digit security passcode:</p>
+      <input type="password" id="pinInput" maxlength="4" placeholder="****" 
+        class="w-full text-center text-3xl font-mono tracking-widest py-3 border-2 border-indigo-200 rounded-2xl focus:border-indigo-500 focus:outline-none mb-3">
+      <p id="pinError" class="text-xs text-red-500 font-bold mb-3 hidden">❌ Invalid Passcode! Please try again.</p>
+      <div class="flex gap-2">
+        <button onclick="closePinModal()" class="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-bold text-sm">Cancel</button>
+        <button onclick="verifyTeacherPin()" class="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-sm btn-3d">Verify</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. MASTER KEY MODAL -->
+  <div id="masterKeyModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto card-shadow">
+      <div class="flex items-center justify-between pb-3 border-b mb-4">
+        <h3 class="text-2xl font-heading font-bold text-indigo-700">📖 Teacher's Master Answer Key</h3>
+        <button onclick="closeMasterKeyModal()" class="text-2xl font-bold text-slate-400 hover:text-slate-600">&times;</button>
+      </div>
+      <div id="masterKeyContent" class="space-y-4 text-sm text-slate-700"></div>
+    </div>
+  </div>
+
+  <!-- 7. LEADERBOARD MODAL -->
+  <div id="leaderboardModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto card-shadow">
+      <div class="flex items-center justify-between pb-3 border-b mb-4">
+        <h3 class="text-2xl font-heading font-bold text-amber-600 flex items-center gap-2">
+          <span>🏆</span> Global Quest Leaderboard
+        </h3>
+        <button onclick="closeLeaderboardModal()" class="text-2xl font-bold text-slate-400 hover:text-slate-600">&times;</button>
+      </div>
+      
+      <div class="flex items-center justify-between mb-4 bg-amber-50 p-3 rounded-2xl border border-amber-200">
+        <span class="text-xs font-bold text-amber-800">Live Synchronised Ranks:</span>
+        <button onclick="refreshLeaderboardData()" class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold btn-3d">
+          🔄 Refresh
+        </button>
+      </div>
+
+      <div id="leaderboardList" class="space-y-2">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Audio FX Generator (Web Audio API)
+    function playSFX(type) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (type === 'correct') {
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+          gain.gain.setValueAtTime(0.1, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.3);
+        } else if (type === 'wrong') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(220, ctx.currentTime); // A3
+          osc.frequency.setValueAtTime(164.81, ctx.currentTime + 0.15); // E3
+          gain.gain.setValueAtTime(0.1, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.35);
+        } else if (type === 'fanfare') {
+          confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+        }
+      } catch (e) {
+        console.warn("Audio Context not allowed yet:", e);
+      }
+    }
+
+    // Custom Toast Notification System
+    function showCustomToast(title, message, icon = "ℹ️") {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = "bg-slate-900/90 backdrop-blur text-white p-3.5 rounded-2xl shadow-xl flex items-start gap-3 pointer-events-auto border border-slate-700 animate-toast";
+      toast.innerHTML = `
+        <div class="text-xl">${icon}</div>
+        <div class="flex-1">
+          <p class="font-bold text-xs text-amber-300">${title}</p>
+          <p class="text-xs text-slate-200 mt-0.5">${message}</p>
+        </div>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+
+    // Global State
+    let studentData = { name: '', className: '' };
+    let isTeacherMode = false;
+    let unlockedStage = 1;
+    let stageScores = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
+    let googleSheetUrl = localStorage.getItem('uasa_quest_gas_url') || 'https://script.google.com/macros/s/AKfycbxf0GKjb-ak0ghF0AkROFFWv5shp7DTygcCRB2kjSItePdtU8ax07df27GMU-if-Sia/exec';
+
+    const stagesConfig = [
+      { id: 1, title: "Paper 1 Part 1", desc: "8 Short Texts (MCQ)", maxScore: 8 },
+      { id: 2, title: "Paper 1 Part 2", desc: "8 Error Correction Questions", maxScore: 8 },
+      { id: 3, title: "Paper 1 Part 3", desc: "8 Information Transfer Questions", maxScore: 8 },
+      { id: 4, title: "Paper 1 Part 4", desc: "10 Reading & Synonym Questions", maxScore: 10 },
+      { id: 5, title: "Paper 1 Part 5", desc: "6 Gapped Text Sentence Puzzle", maxScore: 6 },
+      { id: 6, title: "Paper 2 Part 1", desc: "Email Builder (20 Marks)", maxScore: 20 },
+      { id: 7, title: "Paper 2 Part 2", desc: "Guided Writing: Fast Food (20 Marks)", maxScore: 20 }
+    ];
+
+    // Initialize & Load Saved Local Data
+    function loadSavedData() {
+      const savedStudent = localStorage.getItem('uasa_quest_student');
+      const savedScores = localStorage.getItem('uasa_quest_scores');
+      const savedUnlocked = localStorage.getItem('uasa_quest_unlocked');
+
+      if (savedStudent) {
+        studentData = JSON.parse(savedStudent);
+        document.getElementById('inputStudentName').value = studentData.name || '';
+        document.getElementById('inputStudentClass').value = studentData.className || '';
+        document.getElementById('userBadge').innerText = `👤 ${studentData.name} (${studentData.className})`;
+        document.getElementById('registrationScreen').classList.add('hidden');
+      }
+
+      if (savedScores) stageScores = JSON.parse(savedScores);
+      if (savedUnlocked) unlockedStage = Number(savedUnlocked);
+
+      renderDashboard();
+    }
+
+    function saveLocalState() {
+      localStorage.setItem('uasa_quest_student', JSON.stringify(studentData));
+      localStorage.setItem('uasa_quest_scores', JSON.stringify(stageScores));
+      localStorage.setItem('uasa_quest_unlocked', unlockedStage.toString());
+    }
+
+    function submitStudentRegistration() {
+      const nameInput = document.getElementById('inputStudentName').value.trim();
+      const classInput = document.getElementById('inputStudentClass').value.trim();
+
+      if (!nameInput || !classInput) {
+        showCustomToast("Missing Fields", "Please enter your Full Name and Class.", "⚠️");
+        return;
+      }
+
+      studentData.name = nameInput;
+      studentData.className = classInput;
+      saveLocalState();
+
+      document.getElementById('userBadge').innerText = `👤 ${studentData.name} (${studentData.className})`;
+      document.getElementById('registrationScreen').classList.add('hidden');
+      showCustomToast("Welcome!", `Registered as ${studentData.name}. Good luck!`, "🎉");
+
+      renderDashboard();
+    }
+
+    function renderDashboard() {
+      const grid = document.getElementById('levelGrid');
+      grid.innerHTML = '';
+
+      let totalScore = Object.values(stageScores).reduce((a, b) => a + Number(b || 0), 0);
+      document.getElementById('overallScoreBadge').innerText = `Total Mark: ${totalScore} / 80`;
+
+      stagesConfig.forEach(stage => {
+        const isUnlocked = isTeacherMode || stage.id <= unlockedStage;
+        const score = stageScores[stage.id] || 0;
+
+        const card = document.createElement('div');
+        card.className = `p-5 rounded-3xl border-2 transition card-shadow flex items-center justify-between ${
+          isUnlocked 
+            ? 'bg-white border-amber-300 hover:border-amber-400' 
+            : 'bg-slate-100 border-slate-200 opacity-60'
+        }`;
+
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="font-heading font-bold text-amber-600 text-lg">Stage ${stage.id}</span>
+              ${isUnlocked ? '<span class="text-xs bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full">Unlocked</span>' : '<span class="text-xs bg-slate-200 text-slate-600 font-bold px-2 py-0.5 rounded-full">Locked</span>'}
+            </div>
+            <h3 class="font-bold text-slate-800">${stage.title}</h3>
+            <p class="text-xs text-slate-500">${stage.desc}</p>
+            ${score > 0 ? `<p class="text-xs font-bold text-indigo-600 mt-2">Score: ${score} / ${stage.maxScore}</p>` : ''}
+          </div>
+          <button onclick="${isUnlocked ? `startStage(${stage.id})` : ''}" 
+            class="px-4 py-2.5 rounded-2xl font-bold text-sm btn-3d ${
+              isUnlocked ? 'bg-amber-400 hover:bg-amber-500 text-slate-900' : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+            }">
+            ${isUnlocked ? 'Play 🚀' : '🔒'}
+          </button>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function startStage(stageId) {
+      document.getElementById('dashboardView').classList.add('hidden');
+      document.getElementById('gameView').classList.remove('hidden');
+      document.getElementById('levelTitle').innerText = `Stage ${stageId}: ${stagesConfig[stageId-1].title}`;
+      document.getElementById('levelScoreBadge').innerText = `Score: ${stageScores[stageId] || 0} / ${stagesConfig[stageId-1].maxScore}`;
+
+      const container = document.getElementById('levelContentContainer');
+      container.innerHTML = '';
+
+      if (stageId === 1) renderStage1(container);
+      else if (stageId === 2) renderStage2(container);
+      else if (stageId === 3) renderStage3(container);
+      else if (stageId === 4) renderStage4(container);
+      else if (stageId === 5) renderStage5(container);
+      else if (stageId === 6) renderStage6(container);
+      else if (stageId === 7) renderStage7(container);
+    }
+
+    function showDashboard() {
+      document.getElementById('gameView').classList.add('hidden');
+      document.getElementById('dashboardView').classList.remove('hidden');
+      renderDashboard();
+    }
+
+    // Sync Results Live to Google Sheet
+    async function saveLeaderboardRecord(stageId, score) {
+      stageScores[stageId] = score;
+      if (stageId === unlockedStage && unlockedStage < 7) {
+        unlockedStage++;
+      }
+      saveLocalState();
+
+      let totalScore = Object.values(stageScores).reduce((a, b) => a + Number(b || 0), 0);
+      const isCompletedAll = Object.keys(stageScores).length === 7 && Object.values(stageScores).every(s => s > 0);
+
+      const record = {
+        name: studentData.name || 'Anonymous Pupil',
+        className: studentData.className || 'Form 3',
+        totalScore: totalScore,
+        stageScores: stageScores,
+        isCompletedAll: isCompletedAll,
+        updatedAt: new Date().toISOString()
+      };
+
+      // 1. Live Google Sheets Push
+      const currentGasUrl = googleSheetUrl || localStorage.getItem('uasa_quest_gas_url');
+      if (currentGasUrl) {
+        try {
+          fetch(currentGasUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(record)
+          }).catch(e => console.warn("Google Sheet POST notice:", e));
+        } catch (e) {
+          console.warn("Sync error:", e);
+        }
+      }
+
+      // 2. Local Fallback Persistence
+      let localList = JSON.parse(localStorage.getItem('uasa_quest_local_leaderboard') || '[]');
+      const existingIdx = localList.findIndex(item => item.name === record.name && item.className === record.className);
+      if (existingIdx >= 0) localList[existingIdx] = record;
+      else localList.push(record);
+
+      localStorage.getItem('uasa_quest_local_leaderboard', JSON.stringify(localList));
+    }
+
+    function completeStage(stageId, score, maxScore) {
+      saveLeaderboardRecord(stageId, score);
+      
+      const percentage = Math.round((score / maxScore) * 100);
+      playSFX('fanfare');
+
+      showCustomToast(`Stage ${stageId} Completed!`, `Score: ${score}/${maxScore} (${percentage}%)`, "🎉");
+
+      setTimeout(() => {
+        showDashboard();
+      }, 1200);
+    }
+
+    // STAGE 1: Paper 1 Part 1
+    function renderStage1(c) {
+      c.innerHTML = `
+        <div class="space-y-4 text-sm">
+          <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+            <p class="font-bold text-amber-900 mb-1">Text Notice:</p>
+            <p class="italic text-slate-700">"Dear Mr. Roberts, I am unable to join the robotics club trip tomorrow due to a sudden high fever. My doctor has advised rest for two days."</p>
+          </div>
+          <p class="font-bold text-slate-800">Q1: Why is the student missing the trip?</p>
+          <div class="space-y-2">
+            <button onclick="playSFX('correct'); completeStage(1, 8, 8)" class="w-full text-left p-3.5 border-2 border-slate-200 rounded-2xl hover:border-emerald-500 font-bold hover:bg-emerald-50 transition">
+              A. She is unwell and sick. (Correct)
+            </button>
+            <button onclick="playSFX('wrong'); completeStage(1, 4, 8)" class="w-full text-left p-3.5 border-2 border-slate-200 rounded-2xl hover:border-red-400 transition">
+              B. She forgot the excursion date.
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // STAGE 2: Paper 1 Part 2
+    function renderStage2(c) {
+      c.innerHTML = `
+        <div class="space-y-4 text-sm">
+          <p class="font-bold text-slate-700">Select the correct grammatical word for the blank:</p>
+          <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-slate-800 leading-relaxed">
+            "Camping in the rainforest allows pupils to be friendly <span class="bg-indigo-200 px-2 py-0.5 rounded font-bold text-indigo-900">[ 9 ]</span> nature..."
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="playSFX('correct'); completeStage(2, 8, 8)" class="p-3 bg-white border-2 border-slate-200 hover:border-emerald-500 rounded-xl font-bold">with (Correct)</button>
+            <button onclick="playSFX('wrong'); completeStage(2, 4, 8)" class="p-3 bg-white border-2 border-slate-200 hover:border-red-400 rounded-xl font-bold">at</button>
+          </div>
+        </div>
+      `;
+    }
+
+    // STAGE 3: Paper 1 Part 3
+    function renderStage3(c) {
+      c.innerHTML = `
+        <div class="space-y-4 text-sm">
+          <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-950">
+            <p class="font-bold">Robotics Summer Camp Flyer:</p>
+            <p class="text-xs mt-1">Venue: National Science Centre | Fee: RM150 | Contact: Mr. Alan (012-3456789)</p>
+          </div>
+          <p class="font-bold text-slate-700">Where is the camp held?</p>
+          <input type="text" id="s3Ans" placeholder="Type venue..." class="w-full p-3 border-2 border-slate-200 rounded-2xl font-bold">
+          <button onclick="playSFX('correct'); completeStage(3, 8, 8)" class="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl btn-3d">Submit</button>
+        </div>
+      `;
+    }
+
+    // STAGE 4: Paper 1 Part 4
+    function renderStage4(c) {
+      c.innerHTML = `
+        <div class="space-y-4 text-sm">
+          <p class="font-bold text-slate-700">Find a word in the passage that means 'Very high / tall':</p>
+          <div class="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-950">
+            "Mount Kinabalu is a towering peak located in Sabah, Borneo..."
+          </div>
+          <button onclick="playSFX('correct'); completeStage(4, 10, 10)" class="w-full p-3 bg-amber-400 hover:bg-amber-500 text-slate-900 rounded-2xl font-bold btn-3d">
+            Select 'Towering' (+10 Marks)
+          </button>
+        </div>
+      `;
+    }
+
+    // STAGE 5: Paper 1 Part 5
+    function renderStage5(c) {
+      c.innerHTML = `
+        <div class="space-y-4 text-sm">
+          <p class="font-bold text-slate-700">Match the missing sentence puzzle:</p>
+          <div class="p-4 bg-slate-50 border rounded-2xl">
+            "Last weekend, my family went to the beach. [ _____ ] We built giant sandcastles together."
+          </div>
+          <button onclick="playSFX('correct'); completeStage(5, 6, 6)" class="w-full p-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl btn-3d">
+            Option C: The weather was sunny and clear. (+6 Marks)
+          </button>
+        </div>
+      `;
+    }
+
+    // STAGE 6: Paper 2 Part 1
+    function renderStage6(c) {
+      c.innerHTML = `
+        <div class="space-y-4 text-sm">
+          <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-xs text-indigo-950">
+            <p class="font-bold">Email Prompt:</p>
+            <p>Your friend wants to visit a local attraction. Write an email offering suggestions (about 30-50 words).</p>
+          </div>
+          <textarea placeholder="Dear Alex, I highly recommend visiting..." class="w-full p-3 border-2 border-indigo-200 rounded-2xl h-28 font-bold text-xs"></textarea>
+          <button onclick="playSFX('correct'); completeStage(6, 20, 20)" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl btn-3d">
+            Submit Email Response (+20 Marks)
+          </button>
+        </div>
+      `;
+    }
+
+    // STAGE 7: Paper 2 Part 2 (Fast Food Theme - 120 Words)
+    function renderStage7(container) {
+      container.innerHTML = `
+        <div class="space-y-4 text-sm">
+          <div class="p-4 bg-amber-50 rounded-2xl border border-amber-200">
+            <h4 class="font-bold text-amber-900 mb-1">📝 Paper 2 Part 2: Fast Food That You Like</h4>
+            <p class="text-xs text-amber-800">Answer the 5 guiding prompts below to compose your 120-word essay:</p>
+          </div>
+
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-600 mb-1">1. What it is:</label>
+              <input type="text" id="q1" placeholder="e.g. Crispy Fried Chicken" class="w-full px-3 py-2 border rounded-xl font-bold">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-600 mb-1">2. What it tastes like:</label>
+              <input type="text" id="q2" placeholder="e.g. Crunchy, juicy, hot, and spicy" class="w-full px-3 py-2 border rounded-xl font-bold">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-600 mb-1">3. When you eat it:</label>
+              <input type="text" id="q3" placeholder="e.g. During weekend family treats" class="w-full px-3 py-2 border rounded-xl font-bold">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-600 mb-1">4. Where you eat it:</label>
+              <input type="text" id="q4" placeholder="e.g. At our local outlet or at home" class="w-full px-3 py-2 border rounded-xl font-bold">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-600 mb-1">5. Why it is special to you:</label>
+              <input type="text" id="q5" placeholder="e.g. Brings joy and brings my family together" class="w-full px-3 py-2 border rounded-xl font-bold">
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-2 pt-2">
+            <button onclick="evaluateStage7()" class="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl btn-3d">
+              Submit & Evaluate Essay
+            </button>
+            <button id="btnSampleEssay" onclick="toggleSampleEssay()" class="hidden px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl btn-3d">
+              👁️ View 5-Paragraph Model Essay (120 Words)
+            </button>
+          </div>
+
+          <div id="sampleEssayBox" class="hidden p-5 bg-indigo-50 border border-indigo-200 rounded-2xl text-xs text-indigo-950 space-y-3 leading-relaxed">
+            <div class="flex items-center justify-between">
+              <h5 class="font-bold text-indigo-900 text-sm">✨ 5-Paragraph Model Sample Essay (~117 Words):</h5>
+              <span class="bg-indigo-200 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded-full">Band 1 Standard</span>
+            </div>
+            <p><strong>Paragraph 1 (What it is):</strong> My favorite fast food in the world is golden crispy fried chicken. It is a world-renowned dish loved by people of all ages.</p>
+            <p><strong>Paragraph 2 (What it tastes like):</strong> It tastes remarkably crunchy on the outside while remaining incredibly juicy, savory, and spicy on the inside. Every bite is filled with rich flavor.</p>
+            <p><strong>Paragraph 3 (When you eat it):</strong> I usually enjoy eating this delicious meal on Friday evenings after completing a long week of school work.</p>
+            <p><strong>Paragraph 4 (Where you eat it):</strong> My family prefers purchasing it at our local restaurant or ordering it directly to our dining table at home.</p>
+            <p><strong>Paragraph 5 (Why special):</strong> It is special to me because sharing this mouth-watering meal creates joyful bonding moments with my loved ones.</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function evaluateStage7() {
+      document.getElementById('btnSampleEssay').classList.remove('hidden');
+      completeStage(7, 20, 20);
+    }
+
+    function toggleSampleEssay() {
+      document.getElementById('sampleEssayBox').classList.toggle('hidden');
+    }
+
+    function promptTeacherPin() {
+      if (isTeacherMode) {
+        isTeacherMode = false;
+        document.getElementById('teacherBtnText').innerText = 'Teacher Mode';
+        document.getElementById('teacherBanner').classList.add('hidden');
+        document.getElementById('masterKeyBtn').classList.add('hidden');
+        renderDashboard();
+      } else {
+        document.getElementById('pinModal').classList.remove('hidden');
+        document.getElementById('pinInput').value = '';
+        document.getElementById('pinError').classList.add('hidden');
+      }
+    }
+
+    function closePinModal() {
+      document.getElementById('pinModal').classList.add('hidden');
+    }
+
+    function verifyTeacherPin() {
+      const pin = document.getElementById('pinInput').value;
+      if (pin === '1029') {
+        isTeacherMode = true;
+        document.getElementById('teacherBtnText').innerText = 'Exit Teacher Mode';
+        document.getElementById('teacherBanner').classList.remove('hidden');
+        document.getElementById('masterKeyBtn').classList.remove('hidden');
+        document.getElementById('googleSheetAppUrl').value = googleSheetUrl;
+        closePinModal();
+        renderDashboard();
+        showCustomToast("Teacher Mode Active", "All stages are now unlocked for review.", "🔑");
+      } else {
+        document.getElementById('pinError').classList.remove('hidden');
+      }
+    }
+
+    function saveGoogleSheetUrl() {
+      const val = document.getElementById('googleSheetAppUrl').value.trim();
+      if (val) {
+        googleSheetUrl = val;
+        localStorage.setItem('uasa_quest_gas_url', val);
+        showCustomToast("Sheet URL Saved! 📊", "Pupil results will now sync live to your Google Sheet.", "✅");
+      } else {
+        showCustomToast("URL Empty", "Please paste a valid Google Apps Script URL.", "⚠️");
+      }
+    }
+
+    function resetAllProgress() {
+      if (confirm("Reset all local pupil progress?")) {
+        stageScores = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
+        unlockedStage = 1;
+        saveLocalState();
+        renderDashboard();
+        showCustomToast("Progress Reset", "Pupil stage marks have been cleared.", "🔄");
+      }
+    }
+
+    function openMasterKeyModal() {
+      const content = document.getElementById('masterKeyContent');
+      content.innerHTML = `
+        <div class="space-y-2 text-xs">
+          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 1:</strong> A (Sick)</div>
+          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 2:</strong> 'with'</div>
+          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 3:</strong> National Science Centre</div>
+          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 4:</strong> Towering</div>
+          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 5:</strong> Option C</div>
+          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 6:</strong> Email Builder (+20)</div>
+          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 7:</strong> 120-Word 5-Paragraph Essay on Fast Food (+20)</div>
+        </div>
+      `;
+      document.getElementById('masterKeyModal').classList.remove('hidden');
+    }
+
+    function closeMasterKeyModal() {
+      document.getElementById('masterKeyModal').classList.add('hidden');
+    }
+
+    // Leaderboard Modal Syncing
+    async function openLeaderboardModal() {
+      document.getElementById('leaderboardModal').classList.remove('hidden');
+      refreshLeaderboardData();
+    }
+
+    function closeLeaderboardModal() {
+      document.getElementById('leaderboardModal').classList.add('hidden');
+    }
+
+    async function refreshLeaderboardData() {
+      const listContainer = document.getElementById('leaderboardList');
+      listContainer.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Fetching live ranks...</p>';
+
+      let records = [];
+
+      if (googleSheetUrl) {
+        try {
+          const res = await fetch(googleSheetUrl);
+          const json = await res.json();
+          if (json.status === 'success' && Array.isArray(json.data)) {
+            records = json.data;
+          }
+        } catch (e) {
+          console.warn("Could not fetch remote sheet leaderboard:", e);
+        }
+      }
+
+      if (records.length === 0) {
+        records = JSON.parse(localStorage.getItem('uasa_quest_local_leaderboard') || '[]');
+      }
+
+      records.sort((a, b) => Number(b.totalScore || 0) - Number(a.totalScore || 0));
+
+      if (records.length === 0) {
+        listContainer.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">No pupil records found yet. Be the first to complete a stage!</p>';
+        return;
+      }
+
+      listContainer.innerHTML = '';
+      records.forEach((rec, idx) => {
+        let badgeIcon = `#${idx + 1}`;
+        let badgeColor = 'bg-slate-100 text-slate-700';
+
+        if (idx === 0) { badgeIcon = '🥇 1st'; badgeColor = 'bg-amber-100 text-amber-800 border border-amber-300'; }
+        else if (idx === 1) { badgeIcon = '🥈 2nd'; badgeColor = 'bg-slate-200 text-slate-800'; }
+        else if (idx === 2) { badgeIcon = '🥉 3rd'; badgeColor = 'bg-orange-100 text-orange-800'; }
+
+        const row = document.createElement('div');
+        row.className = `p-3 rounded-2xl flex items-center justify-between border ${badgeColor}`;
+        row.innerHTML = `
+          <div class="flex items-center gap-3">
+            <span class="font-heading font-bold text-sm min-w-[50px]">${badgeIcon}</span>
+            <div>
+              <p class="font-bold text-xs text-slate-800">${rec.name || rec.name}</p>
+              <p class="text-[10px] text-slate-500">${rec.className || rec.className}</p>
+            </div>
+          </div>
+          <div class="text-right">
+            <p class="font-bold text-xs text-indigo-700">${rec.totalScore} / 80 Marks</p>
+            <p class="text-[10px] text-emerald-600 font-bold">${rec.status || 'Active'}</p>
+          </div>
+        `;
+        listContainer.appendChild(row);
+      });
+    }
+
+    // Startup Initialization
+    window.addEventListener('DOMContentLoaded', () => {
+      loadSavedData();
+    });
+  </script>
+</body>
+</html>
