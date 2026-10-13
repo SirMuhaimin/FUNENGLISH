@@ -38,6 +38,14 @@
     .animate-toast {
       animation: toast-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     }
+    .drag-item {
+      user-select: none;
+      touch-action: manipulation;
+    }
+    .drag-item.dragging {
+      opacity: 0.5;
+      transform: scale(0.98);
+    }
   </style>
 </head>
 <body class="p-3 sm:p-6 text-slate-800 relative">
@@ -120,7 +128,7 @@
         </div>
       </div>
       <div class="flex gap-2">
-        <button onclick="resetAllProgress()" class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold btn-3d">
+        <button onclick="confirmResetProgress()" class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold btn-3d">
           🔄 Reset Progress
         </button>
       </div>
@@ -205,8 +213,92 @@
     </div>
   </div>
 
+  <!-- 8. RESET CONFIRMATION MODAL -->
+  <div id="resetModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-sm w-full card-shadow text-center">
+      <div class="text-4xl mb-2">⚠️</div>
+      <h3 class="text-xl font-heading font-bold text-slate-800 mb-2">Reset All Progress?</h3>
+      <p class="text-xs text-slate-500 mb-6">Are you sure you want to reset all local pupil marks and stage progress? This action cannot be undone.</p>
+      <div class="flex gap-2">
+        <button onclick="closeResetModal()" class="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-bold text-sm">Cancel</button>
+        <button onclick="executeResetProgress()" class="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-bold text-sm btn-3d">Yes, Reset</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // Audio FX Generator (Web Audio API)
+    // Global Application State Variables
+    let studentData = { name: '', className: '' };
+    let stageScores = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
+    let unlockedStage = 1;
+    let isTeacherMode = false;
+    let googleSheetUrl = 'https://script.google.com/macros/s/AKfycbwaNRVUHIya_KN75bxXhAiLDZiRcFaSoYcitkQj2s4klCq7Bfehc8hak0iJ6s1iVb9X/exec';
+
+    // Stage 6 Drag & Drop Email State
+    const stage6OriginalStrips = [
+      { id: 'strip_1', text: "Hi Ryan, that sounds like a fantastic idea for the school holidays!" },
+      { id: 'strip_2', text: "We should definitely play badminton together at the local sports hall this Tuesday morning." },
+      { id: 'strip_3', text: "Badminton is a great choice because it boosts our stamina, agility, and overall fitness." },
+      { id: 'strip_4', text: "Plus, playing indoors keeps us active without worrying about rainy weather." },
+      { id: 'strip_5', text: "Please remember to bring your badminton racket, a water bottle, and a small towel." },
+      { id: 'strip_6', text: "I will bring a tube of shuttlecocks, so see you on Tuesday!" }
+    ];
+    let currentStage6Strips = [];
+
+    const stagesConfig = [
+      { id: 1, title: 'Paper 1 Part 1: Short Texts (MCQs)', desc: '8 Questions • 8 Marks', maxScore: 8 },
+      { id: 2, title: 'Paper 1 Part 2: Cloze Text (Digital Wellness)', desc: '8 Questions • 8 Marks', maxScore: 8 },
+      { id: 3, title: 'Paper 1 Part 3: Info Transfer (Ecotourism in Taman Negara)', desc: '8 Questions • 8 Marks', maxScore: 8 },
+      { id: 4, title: 'Paper 1 Part 4: Reading Comprehension (Malayan Tiger)', desc: '10 Questions • 10 Marks', maxScore: 10 },
+      { id: 5, title: 'Paper 1 Part 5: Gapped Text (Pickleball)', desc: '6 Questions • 6 Marks', maxScore: 6 },
+      { id: 6, title: 'Paper 2 Part 1: Email Reply Drag & Drop Game', desc: 'Arrange Sentences • 20 Marks', maxScore: 20 },
+      { id: 7, title: 'Paper 2 Part 2: Guided Essay (My Favourite Dish)', desc: '5 Mind Map Prompts • 20 Marks', maxScore: 20 }
+    ];
+
+    function loadSavedData() {
+      const savedUser = localStorage.getItem('uasa_quest_user');
+      const savedScores = localStorage.getItem('uasa_quest_scores');
+      const savedUnlocked = localStorage.getItem('uasa_quest_unlocked');
+      const savedGasUrl = localStorage.getItem('uasa_quest_gas_url');
+
+      if (savedUser) studentData = JSON.parse(savedUser);
+      if (savedScores) stageScores = JSON.parse(savedScores);
+      if (savedUnlocked) unlockedStage = Number(savedUnlocked);
+      if (savedGasUrl) googleSheetUrl = savedGasUrl;
+
+      if (studentData.name && studentData.className) {
+        document.getElementById('userBadge').innerText = `👤 ${studentData.name} (${studentData.className})`;
+        document.getElementById('registrationScreen').classList.add('hidden');
+      }
+
+      renderDashboard();
+    }
+
+    function saveLocalState() {
+      localStorage.setItem('uasa_quest_user', JSON.stringify(studentData));
+      localStorage.setItem('uasa_quest_scores', JSON.stringify(stageScores));
+      localStorage.setItem('uasa_quest_unlocked', unlockedStage.toString());
+    }
+
+    function showCustomToast(title, message, icon = 'ℹ️') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'bg-slate-900/90 text-white p-3.5 rounded-2xl shadow-xl backdrop-blur-md flex items-center gap-3 animate-toast pointer-events-auto border border-slate-700/50';
+      toast.innerHTML = `
+        <span class="text-2xl">${icon}</span>
+        <div class="flex-1 min-w-0">
+          <p class="font-bold text-xs">${title}</p>
+          <p class="text-[11px] opacity-80 truncate">${message}</p>
+        </div>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
     function playSFX(type) {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -216,89 +308,25 @@
         gain.connect(ctx.destination);
 
         if (type === 'correct') {
-          osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
-          gain.gain.setValueAtTime(0.1, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.3);
-        } else if (type === 'wrong') {
-          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+          osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+          osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 0.4);
+          confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+        } else {
           osc.frequency.setValueAtTime(220, ctx.currentTime); // A3
-          osc.frequency.setValueAtTime(164.81, ctx.currentTime + 0.15); // E3
-          gain.gain.setValueAtTime(0.1, ctx.currentTime);
+          osc.frequency.setValueAtTime(196, ctx.currentTime + 0.15); // G3
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
           gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-          osc.start();
+          osc.start(ctx.currentTime);
           osc.stop(ctx.currentTime + 0.35);
-        } else if (type === 'fanfare') {
-          confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
         }
       } catch (e) {
-        console.warn("Audio Context not allowed yet:", e);
+        console.warn("Audio Context not ready:", e);
       }
-    }
-
-    // Custom Toast Notification System
-    function showCustomToast(title, message, icon = "ℹ️") {
-      const container = document.getElementById('toastContainer');
-      const toast = document.createElement('div');
-      toast.className = "bg-slate-900/90 backdrop-blur text-white p-3.5 rounded-2xl shadow-xl flex items-start gap-3 pointer-events-auto border border-slate-700 animate-toast";
-      toast.innerHTML = `
-        <div class="text-xl">${icon}</div>
-        <div class="flex-1">
-          <p class="font-bold text-xs text-amber-300">${title}</p>
-          <p class="text-xs text-slate-200 mt-0.5">${message}</p>
-        </div>
-      `;
-      container.appendChild(toast);
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transition = 'opacity 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-      }, 4000);
-    }
-
-    // Global State
-    let studentData = { name: '', className: '' };
-    let isTeacherMode = false;
-    let unlockedStage = 1;
-    let stageScores = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
-    let googleSheetUrl = localStorage.getItem('uasa_quest_gas_url') || 'https://script.google.com/macros/s/AKfycbxf0GKjb-ak0ghF0AkROFFWv5shp7DTygcCRB2kjSItePdtU8ax07df27GMU-if-Sia/exec';
-
-    const stagesConfig = [
-      { id: 1, title: "Paper 1 Part 1", desc: "8 Short Texts (MCQ)", maxScore: 8 },
-      { id: 2, title: "Paper 1 Part 2", desc: "8 Error Correction Questions", maxScore: 8 },
-      { id: 3, title: "Paper 1 Part 3", desc: "8 Information Transfer Questions", maxScore: 8 },
-      { id: 4, title: "Paper 1 Part 4", desc: "10 Reading & Synonym Questions", maxScore: 10 },
-      { id: 5, title: "Paper 1 Part 5", desc: "6 Gapped Text Sentence Puzzle", maxScore: 6 },
-      { id: 6, title: "Paper 2 Part 1", desc: "Email Builder (20 Marks)", maxScore: 20 },
-      { id: 7, title: "Paper 2 Part 2", desc: "Guided Writing: Fast Food (20 Marks)", maxScore: 20 }
-    ];
-
-    // Initialize & Load Saved Local Data
-    function loadSavedData() {
-      const savedStudent = localStorage.getItem('uasa_quest_student');
-      const savedScores = localStorage.getItem('uasa_quest_scores');
-      const savedUnlocked = localStorage.getItem('uasa_quest_unlocked');
-
-      if (savedStudent) {
-        studentData = JSON.parse(savedStudent);
-        document.getElementById('inputStudentName').value = studentData.name || '';
-        document.getElementById('inputStudentClass').value = studentData.className || '';
-        document.getElementById('userBadge').innerText = `👤 ${studentData.name} (${studentData.className})`;
-        document.getElementById('registrationScreen').classList.add('hidden');
-      }
-
-      if (savedScores) stageScores = JSON.parse(savedScores);
-      if (savedUnlocked) unlockedStage = Number(savedUnlocked);
-
-      renderDashboard();
-    }
-
-    function saveLocalState() {
-      localStorage.setItem('uasa_quest_student', JSON.stringify(studentData));
-      localStorage.setItem('uasa_quest_scores', JSON.stringify(stageScores));
-      localStorage.setItem('uasa_quest_unlocked', unlockedStage.toString());
     }
 
     function submitStudentRegistration() {
@@ -345,7 +373,7 @@
               <span class="font-heading font-bold text-amber-600 text-lg">Stage ${stage.id}</span>
               ${isUnlocked ? '<span class="text-xs bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full">Unlocked</span>' : '<span class="text-xs bg-slate-200 text-slate-600 font-bold px-2 py-0.5 rounded-full">Locked</span>'}
             </div>
-            <h3 class="font-bold text-slate-800">${stage.title}</h3>
+            <h3 class="font-bold text-slate-800 text-sm sm:text-base">${stage.title}</h3>
             <p class="text-xs text-slate-500">${stage.desc}</p>
             ${score > 0 ? `<p class="text-xs font-bold text-indigo-600 mt-2">Score: ${score} / ${stage.maxScore}</p>` : ''}
           </div>
@@ -384,7 +412,6 @@
       renderDashboard();
     }
 
-    // Sync Results Live to Google Sheet
     async function saveLeaderboardRecord(stageId, score) {
       stageScores[stageId] = score;
       if (stageId === unlockedStage && unlockedStage < 7) {
@@ -404,7 +431,7 @@
         updatedAt: new Date().toISOString()
       };
 
-      // 1. Live Google Sheets Push
+      // Live Google Sheets Push
       const currentGasUrl = googleSheetUrl || localStorage.getItem('uasa_quest_gas_url');
       if (currentGasUrl) {
         try {
@@ -419,189 +446,734 @@
         }
       }
 
-      // 2. Local Fallback Persistence
+      // Local Fallback Persistence
       let localList = JSON.parse(localStorage.getItem('uasa_quest_local_leaderboard') || '[]');
       const existingIdx = localList.findIndex(item => item.name === record.name && item.className === record.className);
       if (existingIdx >= 0) localList[existingIdx] = record;
       else localList.push(record);
 
-      localStorage.getItem('uasa_quest_local_leaderboard', JSON.stringify(localList));
+      localStorage.setItem('uasa_quest_local_leaderboard', JSON.stringify(localList));
     }
 
     function completeStage(stageId, score, maxScore) {
       saveLeaderboardRecord(stageId, score);
-      
-      const percentage = Math.round((score / maxScore) * 100);
-      playSFX('fanfare');
-
-      showCustomToast(`Stage ${stageId} Completed!`, `Score: ${score}/${maxScore} (${percentage}%)`, "🎉");
-
-      setTimeout(() => {
-        showDashboard();
-      }, 1200);
+      showCustomToast(`Stage ${stageId} Completed!`, `Score: ${score} / ${maxScore}`, score >= (maxScore * 0.6) ? '🎉' : '👍');
+      document.getElementById('levelScoreBadge').innerText = `Score: ${score} / ${maxScore}`;
     }
 
-    // STAGE 1: Paper 1 Part 1
+    const stage1Questions = [
+      { q: "1. Clinic Notice: 'Closed on Tuesday due to staff development.' Why is the clinic closed?", options: ["A. Staff training", "B. Renovation", "C. Public Holiday"], ans: "A" },
+      { q: "2. Chat Message: 'Don't forget to bring your sports shoes for practice tomorrow!' What is the reminder for?", options: ["A. Buying new shoes", "B. Bringing sports shoes", "C. Cancelling practice"], ans: "B" },
+      { q: "3. Garden Sign: 'Please stay on the path to protect our plants.' What are visitors asked to do?", options: ["A. Pick flowers", "B. Walk on grass", "C. Walk only on the designated path"], ans: "C" },
+      { q: "4. Workshop Advert: 'Learn basic video editing in 2 hours!' What does the workshop offer?", options: ["A. Photography tips", "B. Basic video editing skills", "C. Acting lessons"], ans: "B" },
+      { q: "5. Email snippet: 'I won't be able to attend choir practice because I have a dental appointment.' Why is Sarah missing practice?", options: ["A. She is studying", "B. She has a dental appointment", "C. She forgot the time"], ans: "B" },
+      { q: "6. Travel Blurb: 'Enjoy cool mountain air and fresh tea in Cameron Highlands.' Why do people visit?", options: ["A. Cool climate and scenic tea plantations", "B. Sandy beaches", "C. Theme parks"], ans: "A" },
+      { q: "7. Recycling Poster: 'Separate plastic and paper before disposal.' What is the advice?", options: ["A. Burn waste", "B. Separate recyclable items", "C. Throw everything in one bin"], ans: "B" },
+      { q: "8. Camp Rules: 'No campfire after 10 PM.' What is required at night?", options: ["A. Put out fires by 10 PM", "B. Start fires at 10 PM", "C. Keep fires burning all night"], ans: "A" }
+    ];
+
     function renderStage1(c) {
-      c.innerHTML = `
-        <div class="space-y-4 text-sm">
-          <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
-            <p class="font-bold text-amber-900 mb-1">Text Notice:</p>
-            <p class="italic text-slate-700">"Dear Mr. Roberts, I am unable to join the robotics club trip tomorrow due to a sudden high fever. My doctor has advised rest for two days."</p>
+      let html = `<div class="space-y-4 text-xs sm:text-sm">`;
+      stage1Questions.forEach((item, idx) => {
+        html += `
+          <div class="p-4 bg-amber-50/50 rounded-2xl border border-amber-200 space-y-2">
+            <p class="font-bold text-slate-800">${item.q}</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              ${item.options.map((opt, oIdx) => `
+                <label class="flex items-center gap-2 p-2.5 rounded-xl border bg-white cursor-pointer hover:bg-amber-100/50 font-normal">
+                  <input type="radio" name="s1_q${idx}" value="${opt.charAt(0)}" class="accent-amber-500">
+                  <span>${opt}</span>
+                </label>
+              `).join('')}
+            </div>
           </div>
-          <p class="font-bold text-slate-800">Q1: Why is the student missing the trip?</p>
-          <div class="space-y-2">
-            <button onclick="playSFX('correct'); completeStage(1, 8, 8)" class="w-full text-left p-3.5 border-2 border-slate-200 rounded-2xl hover:border-emerald-500 font-bold hover:bg-emerald-50 transition">
-              A. She is unwell and sick. (Correct)
-            </button>
-            <button onclick="playSFX('wrong'); completeStage(1, 4, 8)" class="w-full text-left p-3.5 border-2 border-slate-200 rounded-2xl hover:border-red-400 transition">
-              B. She forgot the excursion date.
-            </button>
-          </div>
-        </div>
-      `;
+        `;
+      });
+      html += `
+        <button onclick="evaluateStage1()" class="w-full py-3.5 bg-amber-400 hover:bg-amber-500 text-slate-900 font-heading font-bold rounded-2xl btn-3d text-base">
+          Submit Stage 1 Answers
+        </button>
+      </div>`;
+      c.innerHTML = html;
     }
 
-    // STAGE 2: Paper 1 Part 2
+    function evaluateStage1() {
+      let score = 0;
+      stage1Questions.forEach((item, idx) => {
+        const selected = document.querySelector(`input[name="s1_q${idx}"]:checked`);
+        if (selected && selected.value === item.ans) score++;
+      });
+      playSFX(score >= 5 ? 'correct' : 'wrong');
+      completeStage(1, score, 8);
+    }
+
+    // --- STAGE 2: CLOZE TEXT (Theme: Digital Wellness & Screen Time) ---
+    const stage2Answers = { 9: "important", 10: "on", 11: "and", 12: "to", 13: "health", 14: "helps", 15: "teenagers", 16: "This" };
+
     function renderStage2(c) {
       c.innerHTML = `
-        <div class="space-y-4 text-sm">
-          <p class="font-bold text-slate-700">Select the correct grammatical word for the blank:</p>
-          <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-slate-800 leading-relaxed">
-            "Camping in the rainforest allows pupils to be friendly <span class="bg-indigo-200 px-2 py-0.5 rounded font-bold text-indigo-900">[ 9 ]</span> nature..."
+        <div class="space-y-4 text-xs sm:text-sm">
+          <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl">
+            <h4 class="font-bold text-indigo-900 text-sm mb-2">📱 Cloze Passage: Digital Wellness and Screen Time</h4>
+            <p class="leading-relaxed text-slate-800">
+              Digital wellness has become an increasingly 
+              <span class="bg-indigo-200 px-2 py-0.5 rounded font-bold text-indigo-950">[9] importance</span> 
+              topic among teenagers in Malaysia. Many young people spend hours scrolling through social media platforms 
+              <span class="bg-indigo-200 px-2 py-0.5 rounded font-bold text-indigo-950">[10] in</span> 
+              their smartphones every day. While technology keeps us connected, excessive screen time can cause eye strain 
+              <span class="bg-indigo-200 px-2 py-0.5 rounded font-bold text-indigo-950">[11] but</span> 
+              sleep disturbance. Fortunately, experts recommend setting daily screen limits 
+              <span class="bg-indigo-200 px-2 py-0.5 rounded font-bold text-indigo-950">[12] for</span> 
+              maintain a balanced lifestyle. Taking regular breaks is also good for your mental 
+              <span class="bg-indigo-200 px-2 py-0.5 rounded font-bold text-indigo-950">[13] healthy</span> 
+              because it gives your brain time to rest. Engaging in physical activities 
+              <span class="bg-indigo-200 px-2 py-0.5 rounded font-bold text-indigo-950">[14] helped</span> 
+              students stay energized throughout the week. By managing screen usage wisely, 
+              <span class="bg-indigo-200 px-2 py-0.5 rounded font-bold text-indigo-950">[15] teenager</span> 
+              can build healthy digital habits. 
+              <span class="bg-indigo-200 px-2 py-0.5 rounded font-bold text-indigo-950">[16] These</span> 
+              ensures a positive online experience for everyone!
+            </p>
           </div>
-          <div class="grid grid-cols-2 gap-2">
-            <button onclick="playSFX('correct'); completeStage(2, 8, 8)" class="p-3 bg-white border-2 border-slate-200 hover:border-emerald-500 rounded-xl font-bold">with (Correct)</button>
-            <button onclick="playSFX('wrong'); completeStage(2, 4, 8)" class="p-3 bg-white border-2 border-slate-200 hover:border-red-400 rounded-xl font-bold">at</button>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Q9 (Adjective):</label>
+              <select id="s2_q9" class="w-full p-2.5 border-2 rounded-xl font-bold bg-white text-slate-800">
+                <option value="">Select answer...</option>
+                <option value="important">important</option>
+                <option value="importance">importance</option>
+                <option value="importantly">importantly</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Q10 (Preposition):</label>
+              <select id="s2_q10" class="w-full p-2.5 border-2 rounded-xl font-bold bg-white text-slate-800">
+                <option value="">Select answer...</option>
+                <option value="on">on</option>
+                <option value="at">at</option>
+                <option value="in">in</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Q11 (Conjunction):</label>
+              <select id="s2_q11" class="w-full p-2.5 border-2 rounded-xl font-bold bg-white text-slate-800">
+                <option value="">Select answer...</option>
+                <option value="and">and</option>
+                <option value="but">but</option>
+                <option value="so">so</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Q12 (Infinitive Preposition):</label>
+              <select id="s2_q12" class="w-full p-2.5 border-2 rounded-xl font-bold bg-white text-slate-800">
+                <option value="">Select answer...</option>
+                <option value="to">to</option>
+                <option value="for">for</option>
+                <option value="with">with</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Q13 (Noun Form):</label>
+              <select id="s2_q13" class="w-full p-2.5 border-2 rounded-xl font-bold bg-white text-slate-800">
+                <option value="">Select answer...</option>
+                <option value="health">health</option>
+                <option value="healthy">healthy</option>
+                <option value="healthily">healthily</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Q14 (Present Tense Verb):</label>
+              <select id="s2_q14" class="w-full p-2.5 border-2 rounded-xl font-bold bg-white text-slate-800">
+                <option value="">Select answer...</option>
+                <option value="helps">helps</option>
+                <option value="helped">helped</option>
+                <option value="helping">helping</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Q15 (Plural Noun):</label>
+              <select id="s2_q15" class="w-full p-2.5 border-2 rounded-xl font-bold bg-white text-slate-800">
+                <option value="">Select answer...</option>
+                <option value="teenagers">teenagers</option>
+                <option value="teenager">teenager</option>
+                <option value="teenager's">teenager's</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Q16 (Singular Pronoun):</label>
+              <select id="s2_q16" class="w-full p-2.5 border-2 rounded-xl font-bold bg-white text-slate-800">
+                <option value="">Select answer...</option>
+                <option value="This">This</option>
+                <option value="These">These</option>
+                <option value="They">They</option>
+              </select>
+            </div>
           </div>
+
+          <button onclick="evaluateStage2()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl btn-3d text-sm">
+            Check Answers & Save Stage 2
+          </button>
         </div>
       `;
     }
 
-    // STAGE 3: Paper 1 Part 3
+    function evaluateStage2() {
+      let score = 0;
+      for (let i = 9; i <= 16; i++) {
+        const userVal = document.getElementById(`s2_q${i}`).value.trim();
+        if (userVal.toLowerCase() === stage2Answers[i].toLowerCase()) {
+          score++;
+        }
+      }
+      playSFX(score >= 6 ? 'correct' : 'wrong');
+      completeStage(2, score, 8);
+    }
+
+    // --- STAGE 3: INFO TRANSFER (Theme: Ecotourism in Taman Negara, ~180 words) ---
     function renderStage3(c) {
       c.innerHTML = `
-        <div class="space-y-4 text-sm">
+        <div class="space-y-4 text-xs sm:text-sm">
+          <!-- Text Passage Block (~180 Words) -->
           <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-950">
-            <p class="font-bold">Robotics Summer Camp Flyer:</p>
-            <p class="text-xs mt-1">Venue: National Science Centre | Fee: RM150 | Contact: Mr. Alan (012-3456789)</p>
+            <h4 class="font-bold text-emerald-900 text-sm mb-2">🌿 Reading Text: Ecotourism Adventure in Taman Negara</h4>
+            <p class="leading-relaxed font-normal text-slate-800">
+              Taman Negara, located across Pahang, Kelantan, and Terengganu, is one of the world's oldest tropical rainforests, estimated to be over 130 million years old. Spanning more than 4,300 square kilometers, this ancient national park offers an unforgettable ecotourism adventure for nature enthusiasts worldwide. Visitors can explore the famous Canopy Walkway, suspended 40 meters above the forest floor, offering breathtaking panoramic views of giant hardwood trees and exotic birds. Another thrilling activity is rapid shooting along the Sungai Tembeling river in wooden boats, where travelers experience splashing white water. For wildlife lovers, night jungle walks provide opportunities to spot nocturnal creatures such as tapirs, slow lorises, and glowing fungi. Park visitors are strongly encouraged to practice leave-no-trace principles by keeping the hiking trails clean and avoiding loud noises. Camping facilities and guided tours are available year-round near the Kuala Tahan entrance. Ecotourism in Taman Negara not only protects rich biodiversity but also generates income for local indigenous communities like the Orang Asli.
+            </p>
           </div>
-          <p class="font-bold text-slate-700">Where is the camp held?</p>
-          <input type="text" id="s3Ans" placeholder="Type venue..." class="w-full p-3 border-2 border-slate-200 rounded-2xl font-bold">
-          <button onclick="playSFX('correct'); completeStage(3, 8, 8)" class="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl btn-3d">Submit</button>
+
+          <!-- Official UASA Instruction -->
+          <div class="p-3 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl text-amber-900 font-semibold text-xs leading-relaxed">
+            📝 <strong>Instruction:</strong> Read the text below and complete the following table with <strong>no more than three words and/or a number</strong> from the text for each answer.
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border-2 border-slate-200 space-y-3">
+            <h5 class="font-bold text-slate-800 text-sm">Fact Sheet: Taman Negara Ecotourism (Questions 17 – 24)</h5>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block font-bold text-slate-600 text-xs mb-1">Q17. Estimated age of rainforest:</label>
+                <input type="text" id="s3_17" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-600 text-xs mb-1">Q18. Total park area:</label>
+                <input type="text" id="s3_18" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-600 text-xs mb-1">Q19. Height of Canopy Walkway:</label>
+                <input type="text" id="s3_19" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-600 text-xs mb-1">Q20. River for rapid shooting:</label>
+                <input type="text" id="s3_20" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-600 text-xs mb-1">Q21. Nocturnal creature to spot:</label>
+                <input type="text" id="s3_21" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-600 text-xs mb-1">Q22. Environmental practice for hikers:</label>
+                <input type="text" id="s3_22" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-600 text-xs mb-1">Q23. Main park entrance location:</label>
+                <input type="text" id="s3_23" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-600 text-xs mb-1">Q24. Indigenous group benefiting from ecotourism:</label>
+                <input type="text" id="s3_24" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+            </div>
+          </div>
+
+          <button onclick="evaluateStage3()" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl btn-3d">
+            Submit Information Transfer (+8 Marks)
+          </button>
         </div>
       `;
     }
 
-    // STAGE 4: Paper 1 Part 4
+    function evaluateStage3() {
+      let score = 0;
+      const v17 = (document.getElementById('s3_17')?.value || '').toLowerCase();
+      const v18 = (document.getElementById('s3_18')?.value || '').toLowerCase();
+      const v19 = (document.getElementById('s3_19')?.value || '').toLowerCase();
+      const v20 = (document.getElementById('s3_20')?.value || '').toLowerCase();
+      const v21 = (document.getElementById('s3_21')?.value || '').toLowerCase();
+      const v22 = (document.getElementById('s3_22')?.value || '').toLowerCase();
+      const v23 = (document.getElementById('s3_23')?.value || '').toLowerCase();
+      const v24 = (document.getElementById('s3_24')?.value || '').toLowerCase();
+
+      if (v17.includes('130 million') || v17.includes('130 million years')) score++;
+      if (v18.includes('4,300') || v18.includes('4300') || v18.includes('square kilometers')) score++;
+      if (v19.includes('40 meters') || v19.includes('40m') || v19.includes('40')) score++;
+      if (v20.includes('tembeling') || v20.includes('sungai tembeling')) score++;
+      if (v21.includes('tapir') || v21.includes('slow loris') || v21.includes('fungi')) score++;
+      if (v22.includes('leave-no-trace') || v22.includes('leave no trace')) score++;
+      if (v23.includes('kuala tahan') || v23.includes('tahan')) score++;
+      if (v24.includes('orang asli') || v24.includes('indigenous')) score++;
+
+      playSFX(score >= 5 ? 'correct' : 'wrong');
+      completeStage(3, score, 8);
+    }
+
+    // --- STAGE 4: READING COMPREHENSION (Theme: Malayan Tiger, ~240 words) ---
     function renderStage4(c) {
       c.innerHTML = `
-        <div class="space-y-4 text-sm">
-          <p class="font-bold text-slate-700">Find a word in the passage that means 'Very high / tall':</p>
-          <div class="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-950">
-            "Mount Kinabalu is a towering peak located in Sabah, Borneo..."
+        <div class="space-y-4 text-xs sm:text-sm">
+          <!-- Text Passage Block (~240 Words) -->
+          <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-950">
+            <h4 class="font-bold text-amber-900 text-sm mb-2">🐅 Reading Passage: Protecting the Malayan Tiger</h4>
+            <p class="leading-relaxed text-slate-800 space-y-2">
+              The Malayan tiger, scientifically known as <em>Panthera tigris jacksoni</em>, is a majestic national icon featured prominently on Malaysia's coat of arms. Endemic to the dense tropical forests of Peninsular Malaysia, these solitary apex predators play a vital role in maintaining a healthy forest ecosystem by controlling herbivore populations. Unfortunately, the Malayan tiger population has critically declined to fewer than 150 individuals in the wild, placing them on the critically endangered list.
+              <br><br>
+              The main threats to their survival include habitat loss caused by rapid deforestation, agricultural expansion, and illegal poaching. Snares set by poachers pose a deadly danger, often injuring or killing tigers and other protected wildlife. To combat this urgent crisis, the Malaysian government and non-governmental organizations have launched intensive conservation initiatives. Anti-poaching patrols continuously monitor forest reserves like Belum-Temengor to dismantle illegal traps and deter trespassers.
+              <br><br>
+              Furthermore, wildlife corridors are being constructed to reconnect fragmented forests, enabling tigers to roam safely in search of food and mates. Local indigenous communities are also actively engaged as wildlife rangers, providing valuable traditional knowledge to track and safeguard tiger habitats. Protecting the Malayan tiger requires continuous public support, stricter anti-wildlife trafficking enforcement, and dedicated habitat preservation. Saving this magnificent creature ensures that Malaysia's rich natural heritage remains protected for future generations to cherish and admire.
+            </p>
           </div>
-          <button onclick="playSFX('correct'); completeStage(4, 10, 10)" class="w-full p-3 bg-amber-400 hover:bg-amber-500 text-slate-900 rounded-2xl font-bold btn-3d">
-            Select 'Towering' (+10 Marks)
+
+          <div class="bg-white p-4 rounded-2xl border-2 border-slate-200 space-y-4">
+            <!-- Official UASA Instruction 1 -->
+            <div class="p-3 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl text-amber-900 font-semibold text-xs leading-relaxed">
+              📝 <strong>Instruction (Questions 25 – 32):</strong> Read the text and answer the questions that follow. Choose <strong>no more than five words and/or a number</strong> from the text for each answer.
+            </div>
+
+            <div class="space-y-3">
+              <div>
+                <label class="block font-bold text-slate-700 text-xs mb-1">25. Scientific name of the Malayan tiger:</label>
+                <input type="text" id="s4_25" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 text-xs mb-1">26. Current estimated wild population:</label>
+                <input type="text" id="s4_26" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 text-xs mb-1">27. Human activity causing habitat destruction:</label>
+                <input type="text" id="s4_27" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 text-xs mb-1">28. Dangerous traps set by poachers:</label>
+                <input type="text" id="s4_28" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 text-xs mb-1">29. Forest reserve monitored by anti-poaching patrols:</label>
+                <input type="text" id="s4_29" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 text-xs mb-1">30. Main purpose of constructing wildlife corridors:</label>
+                <input type="text" id="s4_30" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 text-xs mb-1">31. Role performed by local indigenous communities:</label>
+                <input type="text" id="s4_31" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 text-xs mb-1">32. Ultimate benefit of saving the Malayan tiger:</label>
+                <input type="text" id="s4_32" placeholder="Type answer here..." class="w-full p-2 border rounded-xl font-bold text-slate-800">
+              </div>
+            </div>
+
+            <!-- Official UASA Instruction 2 -->
+            <div class="p-3 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl text-indigo-900 font-semibold text-xs leading-relaxed mt-4">
+              📝 <strong>Instruction (Questions 33 – 34):</strong> Complete the table below with a word from the text. For each question, write your answer in the space provided on your answer sheet.
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <div>
+                <label class="block font-bold text-slate-700 text-xs mb-1">33. Word meaning 'living alone; preferring isolation':</label>
+                <select id="s4_33" class="w-full p-2 border rounded-xl font-bold bg-white text-slate-800">
+                  <option value="">Select word from text...</option>
+                  <option value="solitary">solitary</option>
+                  <option value="endemic">endemic</option>
+                  <option value="majestic">majestic</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 text-xs mb-1">34. Word meaning 'broken into smaller, separate parts':</label>
+                <select id="s4_34" class="w-full p-2 border rounded-xl font-bold bg-white text-slate-800">
+                  <option value="">Select word from text...</option>
+                  <option value="fragmented">fragmented</option>
+                  <option value="dismantled">dismantled</option>
+                  <option value="endangered">endangered</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <button onclick="evaluateStage4()" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl btn-3d">
+            Submit Stage 4 Answers (+10 Marks)
           </button>
         </div>
       `;
     }
 
-    // STAGE 5: Paper 1 Part 5
+    function evaluateStage4() {
+      let score = 0;
+      const v25 = (document.getElementById('s4_25')?.value || '').toLowerCase();
+      const v26 = (document.getElementById('s4_26')?.value || '').toLowerCase();
+      const v27 = (document.getElementById('s4_27')?.value || '').toLowerCase();
+      const v28 = (document.getElementById('s4_28')?.value || '').toLowerCase();
+      const v29 = (document.getElementById('s4_29')?.value || '').toLowerCase();
+      const v30 = (document.getElementById('s4_30')?.value || '').toLowerCase();
+      const v31 = (document.getElementById('s4_31')?.value || '').toLowerCase();
+      const v32 = (document.getElementById('s4_32')?.value || '').toLowerCase();
+      const v33 = document.getElementById('s4_33')?.value || '';
+      const v34 = document.getElementById('s4_34')?.value || '';
+
+      if (v25.includes('panthera') || v25.includes('jacksoni')) score++;
+      if (v26.includes('150') || v26.includes('fewer than 150')) score++;
+      if (v27.includes('deforestation') || v27.includes('agricultural expansion')) score++;
+      if (v28.includes('snares') || v28.includes('traps')) score++;
+      if (v29.includes('belum') || v29.includes('temengor') || v29.includes('belum-temengor')) score++;
+      if (v30.includes('reconnect') || v30.includes('fragmented forests')) score++;
+      if (v31.includes('wildlife rangers') || v31.includes('rangers')) score++;
+      if (v32.includes('natural heritage') || v32.includes('heritage')) score++;
+      if (v33 === 'solitary') score++;
+      if (v34 === 'fragmented') score++;
+
+      playSFX(score >= 6 ? 'correct' : 'wrong');
+      completeStage(4, score, 10);
+    }
+
     function renderStage5(c) {
       c.innerHTML = `
-        <div class="space-y-4 text-sm">
-          <p class="font-bold text-slate-700">Match the missing sentence puzzle:</p>
-          <div class="p-4 bg-slate-50 border rounded-2xl">
-            "Last weekend, my family went to the beach. [ _____ ] We built giant sandcastles together."
+        <div class="space-y-4 text-xs sm:text-sm">
+          <div class="p-4 bg-purple-50 border border-purple-200 rounded-2xl text-purple-950">
+            <h4 class="font-bold text-purple-900 text-sm mb-1">🎾 Pickleball: The Fast-Growing Sport Everyone Loves</h4>
+            <p class="text-xs text-purple-800 mb-2">Match the missing sentences into blanks [35] to [40]:</p>
+            
+            <div class="bg-white p-3.5 rounded-xl border space-y-2 text-slate-800 leading-relaxed">
+              <p>Pickleball is a paddle sport that combines elements of tennis, badminton, and ping-pong. <strong>[ 35 ]</strong></p>
+              <p>One reason for its popularity is that the rules are straightforward and easy to master for beginners. <strong>[ 36 ]</strong></p>
+              <p>Additionally, pickleball provides wonderful social benefits as players often compete in doubles. <strong>[ 37 ]</strong></p>
+              <p>It also offers fantastic physical health benefits including improved cardiovascular endurance and hand-eye coordination. <strong>[ 38 ]</strong></p>
+              <p>To start playing, you only need lightweight paddles and a perforated plastic ball. <strong>[ 39 ]</strong></p>
+              <p>Finally, players must always remember essential safety precautions on the court. <strong>[ 40 ]</strong></p>
+            </div>
           </div>
-          <button onclick="playSFX('correct'); completeStage(5, 6, 6)" class="w-full p-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl btn-3d">
-            Option C: The weather was sunny and clear. (+6 Marks)
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold text-slate-700 text-xs mb-1">Q35 (Introduction / Definition):</label>
+              <select id="s5_35" class="w-full p-2 border rounded-xl font-bold bg-white text-xs text-slate-800">
+                <option value="">Select option...</option>
+                <option value="A">A. It was created in the 1960s as a fun backyard game for families.</option>
+                <option value="B">B. Players can learn the basic serves and rallies in under 20 minutes.</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 text-xs mb-1">Q36 (Easy to learn explanation):</label>
+              <select id="s5_36" class="w-full p-2 border rounded-xl font-bold bg-white text-xs text-slate-800">
+                <option value="">Select option...</option>
+                <option value="B">B. Players can learn the basic serves and rallies in under 20 minutes.</option>
+                <option value="C">C. It encourages teamwork, laughter, and making new friends easily.</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 text-xs mb-1">Q37 (Social / team benefits):</label>
+              <select id="s5_37" class="w-full p-2 border rounded-xl font-bold bg-white text-xs text-slate-800">
+                <option value="">Select option...</option>
+                <option value="C">C. It encourages teamwork, laughter, and making new friends easily.</option>
+                <option value="D">D. Regular matches keep your heart healthy and burn many calories.</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 text-xs mb-1">Q38 (Health & physical benefits):</label>
+              <select id="s5_38" class="w-full p-2 border rounded-xl font-bold bg-white text-xs text-slate-800">
+                <option value="">Select option...</option>
+                <option value="D">D. Regular matches keep your heart healthy and burn many calories.</option>
+                <option value="E">E. Equipment is affordable and available at most sporting goods stores.</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 text-xs mb-1">Q39 (Equipment required):</label>
+              <select id="s5_39" class="w-full p-2 border rounded-xl font-bold bg-white text-xs text-slate-800">
+                <option value="">Select option...</option>
+                <option value="E">E. Equipment is affordable and available at most sporting goods stores.</option>
+                <option value="F">F. Wearing proper court shoes and warming up helps prevent injuries.</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 text-xs mb-1">Q40 (Safety measures):</label>
+              <select id="s5_40" class="w-full p-2 border rounded-xl font-bold bg-white text-xs text-slate-800">
+                <option value="">Select option...</option>
+                <option value="F">F. Wearing proper court shoes and warming up helps prevent injuries.</option>
+                <option value="A">A. It was created in the 1960s as a fun backyard game for families.</option>
+              </select>
+            </div>
+          </div>
+
+          <button onclick="evaluateStage5()" class="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-2xl btn-3d">
+            Submit Gapped Text (+6 Marks)
           </button>
         </div>
       `;
     }
 
-    // STAGE 6: Paper 2 Part 1
-    function renderStage6(c) {
-      c.innerHTML = `
-        <div class="space-y-4 text-sm">
-          <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-xs text-indigo-950">
-            <p class="font-bold">Email Prompt:</p>
-            <p>Your friend wants to visit a local attraction. Write an email offering suggestions (about 30-50 words).</p>
-          </div>
-          <textarea placeholder="Dear Alex, I highly recommend visiting..." class="w-full p-3 border-2 border-indigo-200 rounded-2xl h-28 font-bold text-xs"></textarea>
-          <button onclick="playSFX('correct'); completeStage(6, 20, 20)" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl btn-3d">
-            Submit Email Response (+20 Marks)
-          </button>
-        </div>
-      `;
+    function evaluateStage5() {
+      let score = 0;
+      if (document.getElementById('s5_35')?.value === 'A') score++;
+      if (document.getElementById('s5_36')?.value === 'B') score++;
+      if (document.getElementById('s5_37')?.value === 'C') score++;
+      if (document.getElementById('s5_38')?.value === 'D') score++;
+      if (document.getElementById('s5_39')?.value === 'E') score++;
+      if (document.getElementById('s5_40')?.value === 'F') score++;
+
+      playSFX(score >= 4 ? 'correct' : 'wrong');
+      completeStage(5, score, 6);
     }
 
-    // STAGE 7: Paper 2 Part 2 (Fast Food Theme - 120 Words)
-    function renderStage7(container) {
+    // --- STAGE 6: DRAG AND DROP EMAIL REORDERING GAME ---
+    function renderStage6(container) {
+      currentStage6Strips = [...stage6OriginalStrips].sort(() => Math.random() - 0.5);
+
       container.innerHTML = `
-        <div class="space-y-4 text-sm">
-          <div class="p-4 bg-amber-50 rounded-2xl border border-amber-200">
-            <h4 class="font-bold text-amber-900 mb-1">📝 Paper 2 Part 2: Fast Food That You Like</h4>
-            <p class="text-xs text-amber-800">Answer the 5 guiding prompts below to compose your 120-word essay:</p>
+        <div class="space-y-4 text-xs sm:text-sm">
+          <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-indigo-950">
+            <h4 class="font-bold text-indigo-900 text-sm mb-1">📩 Paper 2 Part 1: Email Reply Drag & Drop Challenge</h4>
+            <p class="text-xs leading-relaxed mb-2">
+              <strong>Prompt from Ryan:</strong> "Hi! Our school holiday starts next week. Let's play a sport together to stay fit! 
+              <em>Which sport should we play? Why is it a good choice? What must I bring?</em> Let me know!"
+            </p>
+            <p class="text-xs font-bold text-indigo-700 bg-white/80 p-2.5 rounded-xl border border-indigo-200">
+              🧩 <strong>Instructions:</strong> Drag and drop (or use the ⬆️/⬇️ buttons) to re-order the jumbled sentence strips into a coherent 6-paragraph model email reply to Ryan!
+            </p>
           </div>
 
-          <div class="space-y-3">
-            <div>
-              <label class="block text-xs font-bold text-slate-600 mb-1">1. What it is:</label>
-              <input type="text" id="q1" placeholder="e.g. Crispy Fried Chicken" class="w-full px-3 py-2 border rounded-xl font-bold">
-            </div>
-            <div>
-              <label class="block text-xs font-bold text-slate-600 mb-1">2. What it tastes like:</label>
-              <input type="text" id="q2" placeholder="e.g. Crunchy, juicy, hot, and spicy" class="w-full px-3 py-2 border rounded-xl font-bold">
-            </div>
-            <div>
-              <label class="block text-xs font-bold text-slate-600 mb-1">3. When you eat it:</label>
-              <input type="text" id="q3" placeholder="e.g. During weekend family treats" class="w-full px-3 py-2 border rounded-xl font-bold">
-            </div>
-            <div>
-              <label class="block text-xs font-bold text-slate-600 mb-1">4. Where you eat it:</label>
-              <input type="text" id="q4" placeholder="e.g. At our local outlet or at home" class="w-full px-3 py-2 border rounded-xl font-bold">
-            </div>
-            <div>
-              <label class="block text-xs font-bold text-slate-600 mb-1">5. Why it is special to you:</label>
-              <input type="text" id="q5" placeholder="e.g. Brings joy and brings my family together" class="w-full px-3 py-2 border rounded-xl font-bold">
-            </div>
+          <!-- Drag and Drop List Container -->
+          <div id="dragDropList" class="space-y-2.5 bg-slate-50 p-3 sm:p-4 rounded-2xl border-2 border-indigo-100">
+            <!-- Rendered via renderStage6Strips() -->
           </div>
 
           <div class="flex flex-wrap gap-2 pt-2">
-            <button onclick="evaluateStage7()" class="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl btn-3d">
-              Submit & Evaluate Essay
+            <button onclick="evaluateStage6()" class="flex-1 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl btn-3d text-sm">
+              🚀 Submit Email Order (+20 Marks)
             </button>
-            <button id="btnSampleEssay" onclick="toggleSampleEssay()" class="hidden px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl btn-3d">
-              👁️ View 5-Paragraph Model Essay (120 Words)
+            <button onclick="resetStage6Order()" class="px-4 py-3.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-2xl btn-3d text-xs">
+              🔄 Shuffle Order
             </button>
           </div>
 
-          <div id="sampleEssayBox" class="hidden p-5 bg-indigo-50 border border-indigo-200 rounded-2xl text-xs text-indigo-950 space-y-3 leading-relaxed">
-            <div class="flex items-center justify-between">
-              <h5 class="font-bold text-indigo-900 text-sm">✨ 5-Paragraph Model Sample Essay (~117 Words):</h5>
-              <span class="bg-indigo-200 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded-full">Band 1 Standard</span>
+          <div id="s6FeedbackBox" class="hidden p-4 rounded-2xl text-xs font-bold leading-relaxed border"></div>
+        </div>
+      `;
+
+      renderStage6Strips();
+    }
+
+    function renderStage6Strips() {
+      const list = document.getElementById('dragDropList');
+      if (!list) return;
+      list.innerHTML = '';
+
+      currentStage6Strips.forEach((strip, index) => {
+        const item = document.createElement('div');
+        item.className = 'drag-item bg-white p-3 sm:p-3.5 rounded-2xl border-2 border-indigo-200 card-shadow flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing transition';
+        item.draggable = true;
+        item.dataset.index = index;
+
+        item.innerHTML = `
+          <div class="flex items-center gap-3 flex-1 min-w-0">
+            <div class="w-7 h-7 bg-indigo-100 text-indigo-700 rounded-xl flex items-center justify-center font-bold text-xs shrink-0">
+              ${index + 1}
             </div>
-            <p><strong>Paragraph 1 (What it is):</strong> My favorite fast food in the world is golden crispy fried chicken. It is a world-renowned dish loved by people of all ages.</p>
-            <p><strong>Paragraph 2 (What it tastes like):</strong> It tastes remarkably crunchy on the outside while remaining incredibly juicy, savory, and spicy on the inside. Every bite is filled with rich flavor.</p>
-            <p><strong>Paragraph 3 (When you eat it):</strong> I usually enjoy eating this delicious meal on Friday evenings after completing a long week of school work.</p>
-            <p><strong>Paragraph 4 (Where you eat it):</strong> My family prefers purchasing it at our local restaurant or ordering it directly to our dining table at home.</p>
-            <p><strong>Paragraph 5 (Why special):</strong> It is special to me because sharing this mouth-watering meal creates joyful bonding moments with my loved ones.</p>
+            <p class="font-semibold text-slate-800 text-xs sm:text-sm leading-snug">${strip.text}</p>
           </div>
+
+          <!-- Reorder Action Buttons (Great for Touch / Mobile) -->
+          <div class="flex items-center gap-1 shrink-0">
+            <button onclick="moveStage6Strip(${index}, -1)" ${index === 0 ? 'disabled class="opacity-30 cursor-not-allowed px-2 py-1 bg-slate-100 rounded-lg text-xs"' : 'class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg text-xs transition"'}>
+              ⬆️
+            </button>
+            <button onclick="moveStage6Strip(${index}, 1)" ${index === currentStage6Strips.length - 1 ? 'disabled class="opacity-30 cursor-not-allowed px-2 py-1 bg-slate-100 rounded-lg text-xs"' : 'class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg text-xs transition"'}>
+              ⬇️
+            </button>
+          </div>
+        `;
+
+        item.addEventListener('dragstart', handleDragStart);
+        item.addEventListener('dragover', handleDragOver);
+        item.addEventListener('drop', handleDrop);
+        item.addEventListener('dragend', handleDragEnd);
+
+        list.appendChild(item);
+      });
+    }
+
+    let dragSrcIndex = null;
+
+    function handleDragStart(e) {
+      dragSrcIndex = Number(this.dataset.index);
+      this.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    }
+
+    function handleDragOver(e) {
+      if (e.preventDefault) e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      return false;
+    }
+
+    function handleDrop(e) {
+      if (e.stopPropagation) e.stopPropagation();
+      const targetIndex = Number(this.dataset.index);
+      if (dragSrcIndex !== null && dragSrcIndex !== targetIndex) {
+        const movedItem = currentStage6Strips.splice(dragSrcIndex, 1)[0];
+        currentStage6Strips.splice(targetIndex, 0, movedItem);
+        renderStage6Strips();
+      }
+      return false;
+    }
+
+    function handleDragEnd() {
+      this.classList.remove('dragging');
+    }
+
+    function moveStage6Strip(index, direction) {
+      const targetIndex = index + direction;
+      if (targetIndex >= 0 && targetIndex < currentStage6Strips.length) {
+        const item = currentStage6Strips.splice(index, 1)[0];
+        currentStage6Strips.splice(targetIndex, 0, item);
+        renderStage6Strips();
+      }
+    }
+
+    function resetStage6Order() {
+      currentStage6Strips.sort(() => Math.random() - 0.5);
+      renderStage6Strips();
+      showCustomToast("Shuffled!", "Sentence strips reshuffled.", "🔄");
+    }
+
+    function evaluateStage6() {
+      let correctMatches = 0;
+      currentStage6Strips.forEach((strip, idx) => {
+        if (strip.id === stage6OriginalStrips[idx].id) {
+          correctMatches++;
+        }
+      });
+
+      let score = Math.round((correctMatches / stage6OriginalStrips.length) * 20);
+
+      const feedbackBox = document.getElementById('s6FeedbackBox');
+      feedbackBox.classList.remove('hidden');
+
+      if (score === 20) {
+        feedbackBox.className = 'p-4 rounded-2xl text-xs font-bold leading-relaxed border bg-emerald-50 border-emerald-300 text-emerald-900';
+        feedbackBox.innerHTML = `
+          🎉 <strong>Perfect Sequence! (20 / 20 Marks)</strong><br>
+          You successfully arranged all 6 sentence strips into the ideal email reply format!
+        `;
+        playSFX('correct');
+      } else {
+        feedbackBox.className = 'p-4 rounded-2xl text-xs font-bold leading-relaxed border bg-amber-50 border-amber-300 text-amber-900';
+        feedbackBox.innerHTML = `
+          👍 <strong>Score: ${score} / 20 Marks (${correctMatches} of 6 sentences in exact place)</strong><br>
+          Keep tweaking the sentence order! Tip: Start with a greeting, state the sport choice, provide reasons, list required items, and end with a sign-off.
+        `;
+        playSFX('wrong');
+      }
+
+      completeStage(6, score, 20);
+    }
+
+    function renderStage7(container) {
+      container.innerHTML = `
+        <div class="space-y-4 text-xs sm:text-sm">
+          <div class="p-4 bg-amber-50 rounded-2xl border border-amber-200">
+            <h4 class="font-bold text-amber-900 text-sm mb-1">🍜 Paper 2 Part 2: Guided Essay - Fill in the Blanks</h4>
+            <p class="text-xs text-amber-800">Complete the model essay below about <strong>"My Favourite Dish"</strong> by typing the missing points into the blank boxes. Read the <strong>💡 hints inside each text box</strong> to assist you!</p>
+          </div>
+
+          <!-- Embedded Passage with Text Box Input Hints -->
+          <div class="bg-white p-5 rounded-2xl border-2 border-slate-200 space-y-4 text-slate-800 leading-relaxed text-xs sm:text-sm">
+            <p>
+              <strong>Paragraph 1 (What it is):</strong><br>
+              My absolute favourite dish in the whole world is traditional Malaysian 
+              <input type="text" id="s7_b1" placeholder="💡 Hint: Name of dish" class="w-full sm:w-auto px-3 py-1.5 border-2 border-amber-300 rounded-xl font-bold text-indigo-900 focus:border-amber-500 my-1 bg-amber-50/50"> 
+              made lovingly by my mother.
+            </p>
+
+            <p>
+              <strong>Paragraph 2 (What it tastes like):</strong><br>
+              It consists of fragrant rice cooked in rich 
+              <input type="text" id="s7_b2" placeholder="💡 Hint: Key ingredient" class="w-full sm:w-auto px-3 py-1.5 border-2 border-amber-300 rounded-xl font-bold text-indigo-900 focus:border-amber-500 my-1 bg-amber-50/50"> 
+              and served with delicious 
+              <input type="text" id="s7_b3" placeholder="💡 Hint: Sauce/flavour" class="w-full sm:w-auto px-3 py-1.5 border-2 border-amber-300 rounded-xl font-bold text-indigo-900 focus:border-amber-500 my-1 bg-amber-50/50">, 
+              boiled eggs, and crispy fried chicken.
+            </p>
+
+            <p>
+              <strong>Paragraph 3 (When you eat it):</strong><br>
+              My family usually enjoys this delightful meal together on 
+              <input type="text" id="s7_b4" placeholder="💡 Hint: Day/Time" class="w-full sm:w-auto px-3 py-1.5 border-2 border-amber-300 rounded-xl font-bold text-indigo-900 focus:border-amber-500 my-1 bg-amber-50/50"> 
+              after our weekly family exercise routine.
+            </p>
+
+            <p>
+              <strong>Paragraph 4 (Where you eat it):</strong><br>
+              We love sitting together at our kitchen 
+              <input type="text" id="s7_b5" placeholder="💡 Hint: Place" class="w-full sm:w-auto px-3 py-1.5 border-2 border-amber-300 rounded-xl font-bold text-indigo-900 focus:border-amber-500 my-1 bg-amber-50/50"> 
+              while chatting, smiling, and sharing happy stories.
+            </p>
+
+            <p>
+              <strong>Paragraph 5 (Why it is special):</strong><br>
+              This dish is extra special to me because it symbolizes my mother's 
+              <input type="text" id="s7_b6" placeholder="💡 Hint: Feeling" class="w-full sm:w-auto px-3 py-1.5 border-2 border-amber-300 rounded-xl font-bold text-indigo-900 focus:border-amber-500 my-1 bg-amber-50/50"> 
+              and always brings warmth and joy to our home.
+            </p>
+          </div>
+
+          <div class="flex flex-wrap gap-2 pt-1">
+            <button onclick="evaluateStage7()" class="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl btn-3d text-sm">
+              🚀 Check Answers & Submit Essay (+20 Marks)
+            </button>
+          </div>
+
+          <div id="s7FeedbackBox" class="hidden p-4 rounded-2xl text-xs font-bold leading-relaxed border"></div>
         </div>
       `;
     }
 
     function evaluateStage7() {
-      document.getElementById('btnSampleEssay').classList.remove('hidden');
-      completeStage(7, 20, 20);
-    }
+      const b1 = (document.getElementById('s7_b1')?.value || '').trim().toLowerCase();
+      const b2 = (document.getElementById('s7_b2')?.value || '').trim().toLowerCase();
+      const b3 = (document.getElementById('s7_b3')?.value || '').trim().toLowerCase();
+      const b4 = (document.getElementById('s7_b4')?.value || '').trim().toLowerCase();
+      const b5 = (document.getElementById('s7_b5')?.value || '').trim().toLowerCase();
+      const b6 = (document.getElementById('s7_b6')?.value || '').trim().toLowerCase();
 
-    function toggleSampleEssay() {
-      document.getElementById('sampleEssayBox').classList.toggle('hidden');
+      if (!b1 || !b2 || !b3 || !b4 || !b5 || !b6) {
+        showCustomToast("Incomplete Blanks", "Please fill in all 6 blanks before submitting.", "⚠️");
+        return;
+      }
+
+      let correctCount = 0;
+      if (b1.length >= 3) correctCount++; // Dish Name
+      if (b2.includes('coconut') || b2.includes('santan') || b2.includes('milk')) correctCount++;
+      if (b3.includes('sambal') || b3.includes('spicy') || b3.includes('sauce') || b3.includes('curry')) correctCount++;
+      if (b4.includes('sunday') || b4.includes('morning') || b4.includes('weekend')) correctCount++;
+      if (b5.includes('table') || b5.includes('dining')) correctCount++;
+      if (b6.includes('love') || b6.includes('care') || b6.includes('affection')) correctCount++;
+
+      let score = Math.round((correctCount / 6) * 20);
+
+      const feedbackBox = document.getElementById('s7FeedbackBox');
+      if (feedbackBox) {
+        feedbackBox.classList.remove('hidden');
+        if (score >= 18) {
+          feedbackBox.className = 'p-4 rounded-2xl text-xs font-bold leading-relaxed border bg-emerald-50 border-emerald-300 text-emerald-900';
+          feedbackBox.innerHTML = `🎉 <strong>Excellent Essay! (${score} / 20 Marks)</strong><br>All 6 blanks in your model essay have been accurately filled!`;
+          playSFX('correct');
+        } else {
+          feedbackBox.className = 'p-4 rounded-2xl text-xs font-bold leading-relaxed border bg-amber-50 border-amber-300 text-amber-900';
+          feedbackBox.innerHTML = `👍 <strong>Score: ${score} / 20 Marks (${correctCount} of 6 blanks correct)</strong><br>Review the hints inside each box and try again!`;
+          playSFX('wrong');
+        }
+      }
+
+      completeStage(7, score, 20);
     }
 
     function promptTeacherPin() {
@@ -611,6 +1183,7 @@
         document.getElementById('teacherBanner').classList.add('hidden');
         document.getElementById('masterKeyBtn').classList.add('hidden');
         renderDashboard();
+        showCustomToast("Teacher Mode Exited", "Standard pupil view restored.", "🔒");
       } else {
         document.getElementById('pinModal').classList.remove('hidden');
         document.getElementById('pinInput').value = '';
@@ -649,27 +1222,55 @@
       }
     }
 
-    function resetAllProgress() {
-      if (confirm("Reset all local pupil progress?")) {
-        stageScores = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
-        unlockedStage = 1;
-        saveLocalState();
-        renderDashboard();
-        showCustomToast("Progress Reset", "Pupil stage marks have been cleared.", "🔄");
-      }
+    function confirmResetProgress() {
+      document.getElementById('resetModal').classList.remove('hidden');
+    }
+
+    function closeResetModal() {
+      document.getElementById('resetModal').classList.add('hidden');
+    }
+
+    function executeResetProgress() {
+      stageScores = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
+      unlockedStage = 1;
+      saveLocalState();
+      closeResetModal();
+      renderDashboard();
+      showCustomToast("Progress Reset", "Pupil stage marks have been cleared.", "🔄");
     }
 
     function openMasterKeyModal() {
       const content = document.getElementById('masterKeyContent');
       content.innerHTML = `
-        <div class="space-y-2 text-xs">
-          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 1:</strong> A (Sick)</div>
-          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 2:</strong> 'with'</div>
-          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 3:</strong> National Science Centre</div>
-          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 4:</strong> Towering</div>
-          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 5:</strong> Option C</div>
-          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 6:</strong> Email Builder (+20)</div>
-          <div class="p-3 bg-indigo-50 rounded-xl"><strong>Stage 7:</strong> 120-Word 5-Paragraph Essay on Fast Food (+20)</div>
+        <div class="space-y-3 text-xs">
+          <div class="p-3 bg-indigo-50 rounded-xl">
+            <strong>Stage 1 (Paper 1 Part 1):</strong><br>
+            Q1: A (Staff training) | Q2: B (Bringing sports shoes) | Q3: C (Walk only on designated path) | Q4: B (Basic video editing) | Q5: B (Dental appointment) | Q6: A (Cool climate/tea) | Q7: B (Separate recyclables) | Q8: A (Put out fires by 10 PM)
+          </div>
+          <div class="p-3 bg-indigo-50 rounded-xl">
+            <strong>Stage 2 (Paper 1 Part 2 - Digital Wellness):</strong><br>
+            9: important | 10: on | 11: and | 12: to | 13: health | 14: helps | 15: teenagers | 16: This
+          </div>
+          <div class="p-3 bg-indigo-50 rounded-xl">
+            <strong>Stage 3 (Paper 1 Part 3 - Ecotourism in Taman Negara):</strong><br>
+            17: over 130 million years | 18: 4,300 square kilometers | 19: 40 meters | 20: Sungai Tembeling | 21: tapirs / slow lorises | 22: leave-no-trace principles | 23: Kuala Tahan | 24: Orang Asli
+          </div>
+          <div class="p-3 bg-indigo-50 rounded-xl">
+            <strong>Stage 4 (Paper 1 Part 4 - Protecting the Malayan Tiger):</strong><br>
+            25: Panthera tigris jacksoni | 26: fewer than 150 individuals | 27: rapid deforestation | 28: snares | 29: Belum-Temengor | 30: to reconnect fragmented forests | 31: wildlife rangers | 32: protecting natural heritage | 33: solitary | 34: fragmented
+          </div>
+          <div class="p-3 bg-indigo-50 rounded-xl">
+            <strong>Stage 5 (Paper 1 Part 5 - Pickleball):</strong><br>
+            35: A | 36: B | 37: C | 38: D | 39: E | 40: F
+          </div>
+          <div class="p-3 bg-indigo-50 rounded-xl">
+            <strong>Stage 6 (Paper 2 Part 1 - Drag & Drop Email Reordering):</strong><br>
+            Correct Sentence Sequence: Strip 1 ➔ Strip 2 ➔ Strip 3 ➔ Strip 4 ➔ Strip 5 ➔ Strip 6. Max Score: 20/20.
+          </div>
+          <div class="p-3 bg-indigo-50 rounded-xl">
+            <strong>Stage 7 (Paper 2 Part 2 - Guided Essay Fill-in-the-Blanks):</strong><br>
+            Blank 1: Nasi Lemak (or dish name) | Blank 2: coconut milk | Blank 3: spicy sambal | Blank 4: Sunday mornings | Blank 5: dining table | Blank 6: unconditional love. Max Score: 20/20.
+          </div>
         </div>
       `;
       document.getElementById('masterKeyModal').classList.remove('hidden');
@@ -679,8 +1280,7 @@
       document.getElementById('masterKeyModal').classList.add('hidden');
     }
 
-    // Leaderboard Modal Syncing
-    async function openLeaderboardModal() {
+    function openLeaderboardModal() {
       document.getElementById('leaderboardModal').classList.remove('hidden');
       refreshLeaderboardData();
     }
@@ -733,8 +1333,8 @@
           <div class="flex items-center gap-3">
             <span class="font-heading font-bold text-sm min-w-[50px]">${badgeIcon}</span>
             <div>
-              <p class="font-bold text-xs text-slate-800">${rec.name || rec.name}</p>
-              <p class="text-[10px] text-slate-500">${rec.className || rec.className}</p>
+              <p class="font-bold text-xs text-slate-800">${rec.name}</p>
+              <p class="text-[10px] text-slate-500">${rec.className}</p>
             </div>
           </div>
           <div class="text-right">
@@ -746,7 +1346,7 @@
       });
     }
 
-    // Startup Initialization
+    // Application Initialization
     window.addEventListener('DOMContentLoaded', () => {
       loadSavedData();
     });
